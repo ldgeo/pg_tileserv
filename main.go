@@ -7,11 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
-	"io/ioutil"
 
 	// REST routing
 	"github.com/gorilla/handlers"
@@ -72,6 +73,7 @@ func init() {
 	viper.SetDefault("DbPoolMaxConns", 4)
 	viper.SetDefault("DbTimeout", 10)
 	viper.SetDefault("CORSOrigins", "*")
+	viper.SetDefault("BasePath", "/")
 }
 
 func main() {
@@ -137,6 +139,12 @@ func main() {
 			log.Info("Config file: none found, using defaults")
 		}
 	}
+
+	basePath := viper.GetString("BasePath")
+	log.Infof("Serving HTTP  at %s/", formatBaseURL(fmt.Sprintf("http://%s:%d",
+		viper.GetString("HttpHost"), viper.GetInt("HttpPort")), basePath))
+	log.Infof("Serving HTTPS at %s/", formatBaseURL(fmt.Sprintf("http://%s:%d",
+		viper.GetString("HttpHost"), viper.GetInt("HttpsPort")), basePath))
 
 	// Load the global layer list right away
 	// Also connects to database
@@ -382,7 +390,14 @@ func SetSchemeHTTPS(next http.Handler) http.Handler {
 
 func TileRouter() *mux.Router {
 	// creates a new instance of a mux router
-	r := mux.NewRouter().StrictSlash(true)
+	r := mux.NewRouter().
+		StrictSlash(true).
+		PathPrefix(
+			"/" +
+				strings.TrimLeft(viper.GetString("BasePath"), "/"),
+		).
+		Subrouter()
+
 	// Front page and layer list
 	r.Handle("/", tileAppHandler(requestListHtml))
 	r.Handle("/index.html", tileAppHandler(requestListHtml))
